@@ -50,11 +50,11 @@ Each row in this file represents a loan we would like to fund. Loans are ordered
   
 Field, Type, Description  
   
-- amount, integer, The size of the loan in cents.  
-- id, integer, The ID of the loan. Strictly increasing.  
-- interest_rate, float, Between 0 and 1; the interest rate of the loan. In this simplified model, the amount of money we earn from a loan (if it doesn’t default) is amount​ * ​interest_rate​.  
-- default_likelihood, float, Between 0 and 1; the probability that this loan will default. In this simplified model, when the loan defaults, we lose all the money that we lent and do not earn any interest on the loan.  
-- state, string, State where the loan originated.  
+- `amount`, `integer`, The size of the loan in cents.  
+- `id`, `integer`, The ID of the loan. Strictly increasing.  
+- `interest_rate`, `float`, Between 0 and 1; the interest rate of the loan. In this simplified model, the amount of money we earn from a loan (if it doesn’t default) is amount​ * ​interest_rate​.  
+- `default_likelihood`, `float`, Between 0 and 1; the probability that this loan will default. In this simplified model, when the loan defaults, we lose all the money that we lent and do not earn any interest on the loan.  
+- `state`, `string`, State where the loan originated.  
   
 ## Calculating Loan Yields  
   
@@ -85,15 +85,15 @@ Please include instructions on how to run (and build, if necessary) your code. Y
 Each row in this file describes a loan assignment.  
 Field, Type, Description  
   
-- loan_id, integer, The ID of the loan.  
-- facility_id, integer, If the loan is funded, the ID of its facility; otherwise, empty.  
+- `loan_id`, `integer`, The ID of the loan.  
+- `facility_id`, `integer`, If the loan is funded, the ID of its facility; otherwise, empty.  
    
 ### yields.csv  
 Each row in this file describes the expected yield of a facility.  
 Field, Type, Description
     
-- facility_id, integer, The ID of the facility.  
-- expected_yield, int, The expected yield of the facility, rounded to the nearest cent.  
+- `facility_id`, `integer`, The ID of the facility.  
+- `expected_yield`, `int`, The expected yield of the facility, rounded to the nearest cent.  
   
 This is defined as the sum of the expected yields for all the loans in the facility.  
   
