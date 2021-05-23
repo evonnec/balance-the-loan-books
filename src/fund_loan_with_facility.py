@@ -28,7 +28,7 @@ def make_covenants_dict(covenants_input_file):
     covenants_df = get_df(covenants_input_file)
     dict_covenants = dict()
     for [covenant_facility_id, covenant_max_default_likelihood, covenant_bank_id, covenant_banned_state] in covenants_df:
-        dict_covenants[covenant_bank_id] = [covenant_facility_id, covenant_max_default_likelihood, covenant_banned_state]
+        dict_covenants[covenant_bank_id, covenant_facility_id, covenant_banned_state] = [covenant_max_default_likelihood]
     return dict_covenants
 
 def make_facilities_dict(facilities_input_file):
@@ -49,7 +49,7 @@ def expected_yield_per_facility(facility_id):
     expected_yield_for_facility_id = sum(calculate_yield())
     return expected_yield_for_facility_id
 
-def generate_assignments(loans_input_file = "/." + sys.argv[1] + "/input/loans.csv"):
+def generate_assignments(loans_input_file = "./" + sys.argv[1] + "/input/loans.csv"):
     def _get_df(input_file):
         with open(input_file, mode='r') as input_df:
             csvreader = csv.reader(input_df, delimiter=',')
@@ -63,10 +63,15 @@ def generate_assignments(loans_input_file = "/." + sys.argv[1] + "/input/loans.c
                     output_df.append(row)
         return output_df
     loans_df = _get_df(loans_input_file)
-    facilities = make_facilities_dict(facilities_input_file="/." + sys.argv[1] + "/input/facilities.csv")
+    print(loans_df)
+    facilities = make_facilities_dict(facilities_input_file="./" + sys.argv[1] + "/input/facilities.csv")
+    print(facilities)
     covenants = make_covenants_dict(covenants_input_file="./" + sys.argv[1] + "/input/covenants.csv")
-    
+    print(covenants)
     for loan_interest_rate, loan_amt, loan_id, loan_default_likelihood, loan_state in loans_df:
-        
+        pass
 
-    return 
+    # return 
+
+if __name__ == "__main__":
+    generate_assignments()
