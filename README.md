@@ -20,53 +20,46 @@ Each row in this file describes a single facility.
   
 Field, Type, Description
   
-- `facility_id`, `integer`, The ID of the facility.
-     
-- `bank_id`, `integer`, The ID of the bank providing this facility.
+- `facility_id`, `integer`, The ID of the facility.  
+- `bank_id`, `integer`, The ID of the bank providing this facility.  
+- `interest_rate`, `float`, Between 0 and 1; the interest rate of this facility. In this simplified model, when we use ​x​ dollars from this facility to fund a loan, we are charged `​x * interest_rate​` dollars in interest.  
+- `amount`, `integer`, The total capacity of the facility in cents.  
   
-- `interest_rate`, `float`, Between 0 and 1; the interest rate of this facility. In this simplified model, when we use ​x​ dollars from this facility to fund a loan, we are charged `​x * interest_rate​` dollars in interest.
+### banks.csv  
+Each row in this file describes a banking partner.  
   
-- `amount`, `integer`, The total capacity of the facility in cents.
- 
-### banks.csv
-Each row in this file describes a banking partner.
-
-Field, Type, Description
+Field, Type, Description  
   
-- `bank_id`, `integer`, The ID of the bank. 
-- `bank_name`, `string`, The name of the bank.
+- `bank_id`, `integer`, The ID of the bank.   
+- `bank_name`, `string`, The name of the bank.  
   
-### covenants.csv
+### covenants.csv  
   
-Each row in this denormalized file represents at least one covenant that we have with a bank. If a row contains both a ​max_default_likelihood​ and a ​banned_state​, they should be treated as separate covenants.
+Each row in this denormalized file represents at least one covenant that we have with a bank. If a row contains both a ​max_default_likelihood​ and a ​banned_state​, they should be treated as separate covenants.  
   
-Field, Type, Description
+Field, Type, Description  
   
-- `bank_id`, `integer`, The ID of the bank requiring this covenant.
+- `bank_id`, `integer`, The ID of the bank requiring this covenant.  
+- `facility_id`, `integer`, If present, denotes that this covenant applies to the facility with this ID; otherwise, this covenant applies to all of the bank’s facilities.  
+- `max_default_likelihood`, `float`, If present, specifies the maximum allowed default rate for loans in the facility (or in the bank’s facilities).  
+- `banned_state`, `string`, If present, indicates that loans in the facility (or in the bank’s facilities) may not originate from this state.  
   
-- `facility_id`, `integer`, If present, denotes that this covenant applies to the facility with this ID; otherwise, this covenant applies to all of the bank’s facilities.
-   
-- `max_default_likelihood`, `float`, If present, specifies the maximum allowed default rate for loans in the facility (or in the bank’s facilities).
+### loans.csv  
   
-- `banned_state`, `string`, If present, indicates that loans in the facility (or in the bank’s facilities) may not originate from this state.
-   
-### loans.csv
+Each row in this file represents a loan we would like to fund. Loans are ordered chronologically based on when we received them.  
   
-Each row in this file represents a loan we would like to fund. Loans are ordered chronologically based on when we received them.
-  
-Field, Type, Description
+Field, Type, Description  
   
 - amount, integer, The size of the loan in cents.  
 - id, integer, The ID of the loan. Strictly increasing.  
 - interest_rate, float, Between 0 and 1; the interest rate of the loan. In this simplified model, the amount of money we earn from a loan (if it doesn’t default) is amount​ * ​interest_rate​.  
-- default_likelihood, float, Between 0 and 1; the probability that this loan will default. In this simplified model, when the loan defaults, we lose all the money that we lent and do not earn any interest on the loan.
-- state, string, State where the loan originated.
+- default_likelihood, float, Between 0 and 1; the probability that this loan will default. In this simplified model, when the loan defaults, we lose all the money that we lent and do not earn any interest on the loan.  
+- state, string, State where the loan originated.  
   
- 
 ## Calculating Loan Yields  
   
 The ​expected yield​ of a loan funded by a facility is the amount of interest that we expect to earn from the loan (taking into account the chance of a default), minus the expected loss from a default, minus the interest that we pay to to the bank to use their facility:
-
+  
 ```
 expected_yield =  
 (1 - default_likelihood) * loan_interest_rate * amount  
@@ -77,32 +70,33 @@ expected_yield =
 ## Guarantees  
 Our FP&A team has been hard at work trying to negotiate good facility deals with our banking partners. They have guaranteed us that the following constraints hold:  
   
-1. We can fund all the loans by processing them in the order that they are received and assigning each loan to the cheapest facility that can accommodate that loan legally (i.e. satisfying all the required covenants and not exceeding the facility’s capacity). ​  
+1. We can fund all the loans by processing them in the order that they are received and assigning each loan to the cheapest facility that can accommodate that loan legally (i.e. satisfying all the required covenants and not exceeding the facility’s capacity). ​ 
 Note: depending on your ordering of facilities with equal interest rate, you may be unable to assign the last loan (#425) of the large data set. This is OK.  
   
 2. The expected yield of funding any loan with any facility is always nonnegative.  
   
 ## Deliverables  
-Your program should consume the input data and attempt to fund each loan with a facility. Unfunded loans are ignored by our system -- they will earn no interest, nor will they lose money if they default. Your program should be ​streaming,​ meaning it that it should process loans in the order that they are received and not use future loans to determine how the current loan should be funded.
+Your program should consume the input data and attempt to fund each loan with a facility. Unfunded loans are ignored by our system -- they will earn no interest, nor will they lose money if they default. Your program should be ​streaming,​ meaning it that it should process loans in the order that they are received and not use future loans to determine how the current loan should be funded.  
   
 Please include instructions on how to run (and build, if necessary) your code. Your program should produce two output files:  
   
 ### assignments.csv  
   
-Each row in this file describes a loan assignment.
+Each row in this file describes a loan assignment.  
 Field, Type, Description  
   
 - loan_id, integer, The ID of the loan.  
-- facility_id, integer, If the loan is funded, the ID of its facility; otherwise, empty.
+- facility_id, integer, If the loan is funded, the ID of its facility; otherwise, empty.  
    
-### yields.csv
+### yields.csv  
 Each row in this file describes the expected yield of a facility.  
-Field, Type, Description  
+Field, Type, Description
+    
 - facility_id, integer, The ID of the facility.  
-- expected_yield, int, The expected yield of the facility, rounded to the nearest cent.   
-
-This is defined as the sum of the expected yields for all the loans in the facility.
-
+- expected_yield, int, The expected yield of the facility, rounded to the nearest cent.  
+  
+This is defined as the sum of the expected yields for all the loans in the facility.  
+  
 After completing a working code solution, you should include a write-up answering the following questions to the best of your ability:  
 1. How long did you spend working on the problem? What did you find to be the most difficult part?  
 2. How would you modify your data model or code to account for an eventual introduction of new, as-of-yet unknown types of covenants, beyond just maximum default likelihood and state restrictions?  
@@ -123,8 +117,9 @@ Your program will be evaluated based on the following criteria, in decreasing or
 Important! Please read carefully​:  
 ● We strongly suggest first implementing a simple, well-written, correct, and (reasonably)
 performant program before attempting to optimise it further.  
+  
 ● If you are in a time pinch, it should take you at most 2-3 hours to write a minimal working program and some thoughtful analysis. If you have more time and are confident in your working solution, we encourage you to elaborate on your solution to showcase your architecture and code organization skills, possibly implementing some of your ideas from the write-up questions. If you do expand on your solution after completing the basic requirements, consider using git to commit working checkpoints, in order for us to see your progress and give credit for past versions if the final version does not pan out.  
-More Tips:  
-● Unlike in many other coding challenges, your program’s clarity and efficiency is more
-important than its optimality. Maximising profit in this case is an open problem, so we don’t suggest spending a lot of time coming up with neat heuristics before actually writing a working program. (This is also why we have given you a simple heuristic that is guaranteed to assign all the loans without losing money on any loan.)  
+  
+### More Tips:  
+● Unlike in many other coding challenges, your program’s clarity and efficiency is more important than its optimality. Maximising profit in this case is an open problem, so we don’t suggest spending a lot of time coming up with neat heuristics before actually writing a working program. (This is also why we have given you a simple heuristic that is guaranteed to assign all the loans without losing money on any loan.)  
 ● You may use any language you like. Using a high-level scripting language will probably allow the most rapid progress. You may also use any external libraries that you wish – this will likely be helpful for parsing CSV files in some languages – but you really shouldn’t need to use anything fancy (e.g. databases, multithreading, or LP solvers).  
