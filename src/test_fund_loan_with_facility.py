@@ -8,7 +8,7 @@ import src.fund_loan_with_facility
 
 
 class TestFundLoanWithFacility:
-    def test_self(self):
+    def test_self(self) -> None:
         sample_input = textwrap.dedent(
             """
             interest_rate,amount,id,default_likelihood,state
@@ -17,7 +17,7 @@ class TestFundLoanWithFacility:
             0.35,74965,3,0.06,AL
             """
         )
-        sample_input_file = StringIO(sample_input)
+        # sample_input_file = StringIO(sample_input)
         test_output_file = StringIO()
         src.fund_loan_with_facility.generate_assignments(
             loans_input_file=sample_input,
@@ -38,9 +38,9 @@ class TestFundLoanWithFacility:
         assert output == expected_output
 
 
-    def test_funded_loan(self):
+    def test_funded_loan(self) -> None:
         pass
-    def test_loan_no_facility(self):
+    def test_loan_no_facility(self) -> None:
         pass
-    def test_yield_is_nonnegative(self):
+    def test_yield_is_nonnegative(self) -> None:
         pass
