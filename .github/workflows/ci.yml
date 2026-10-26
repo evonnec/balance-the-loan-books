@@ -1,0 +1,187 @@
+name: CI
+
+# Job graph:
+#   lint, format, typecheck, test (parallel) -> build (wheel + sdist, smoke-tested, uploaded as "dist")
+# Releases and PyPI publishing live only in release.yml.
+#
+# Python: no job passes `python-version` to setup-uv. uv reads `.python-version` itself and
+# downloads a managed CPython if the runner lacks it. Passing `python-version` would export
+# UV_PYTHON and override `.python-version`.
+
+on:
+  push:
+    branches: [main]
+  # No branch filter: stacked PRs target other PR branches, not just main.
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Cancel superseded PR runs, never a run on main.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (ruff) and lockfile
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: auto
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Check uv.lock is up to date
+        run: uv lock --check
+      - name: Run ruff check
+        run: uv run ruff check --output-format=github .
+
+  format:
+    name: Format (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: auto
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Run ruff format --check
+        run: uv run ruff format --check --diff .
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: auto
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Run mypy
+        run: uv run mypy src tests
+
+  test:
+    name: Test (pytest, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          enable-cache: auto
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+      - name: Install dependencies
+        run: uv sync --locked
+      # TODO: add --cov-fail-under=<N> once the test-suite PR establishes the coverage baseline.
+      - name: Run pytest
+        run: uv run pytest --cov=balance_the_loan_books --cov-report=term-missing --cov-report=xml
+      - name: Upload coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ matrix.os }}
+          path: coverage.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  build:
+    name: Build and smoke-test wheel
+    needs: [lint, format, typecheck, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PACKAGE: balance_the_loan_books
+      ENTRY_POINT: balance-the-loan-books
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          # Built files are uploaded, so the build never restores a cache.
+          enable-cache: false
+      - name: Build
+        run: uv build --no-sources
+      - name: Check wheel contents
+        run: |
+          shopt -s nullglob
+          wheels=(dist/*.whl)
+          if (( ${#wheels[@]} != 1 )); then
+            echo "::error::Expected exactly one wheel in dist/, found ${#wheels[@]}"
+            exit 1
+          fi
+          unzip -Z1 "${wheels[0]}" | tee "$RUNNER_TEMP/wheel-files.txt"
+          grep -qx "$PACKAGE/__init__.py" "$RUNNER_TEMP/wheel-files.txt" \
+            || { echo "::error::wheel is missing $PACKAGE/__init__.py"; exit 1; }
+          grep -qx "$PACKAGE/py.typed" "$RUNNER_TEMP/wheel-files.txt" \
+            || { echo "::error::wheel is missing $PACKAGE/py.typed"; exit 1; }
+          if grep -Eq '^(tests|data)/' "$RUNNER_TEMP/wheel-files.txt"; then
+            echo "::error::wheel must not contain tests/ or data/"
+            exit 1
+          fi
+      - name: Smoke-test the wheel in a fresh venv
+        run: |
+          wheel=$(realpath dist/*.whl)
+          src=$PWD
+          venv="$RUNNER_TEMP/venv"
+          uv venv "$venv"
+          uv pip install --python "$venv/bin/python" "$wheel"
+          # Run from another directory so the checkout cannot shadow the installed package.
+          mkdir -p "$RUNNER_TEMP/ds" "$RUNNER_TEMP/run"
+          cp -R "$src/data/small/input" "$RUNNER_TEMP/ds/input"
+          cd "$RUNNER_TEMP/run"
+          "$venv/bin/$ENTRY_POINT" --version
+          "$venv/bin/$ENTRY_POINT" "$RUNNER_TEMP/ds"
+          diff -u "$src/data/small/output/assignments.csv" "$RUNNER_TEMP/ds/output/assignments.csv"
+          diff -u "$src/data/small/output/yields.csv" "$RUNNER_TEMP/ds/output/yields.csv"
+      - name: Upload dist
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
