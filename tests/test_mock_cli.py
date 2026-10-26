@@ -48,7 +48,8 @@ def test_success_writes_one_summary_line_to_stderr_and_nothing_to_stdout(
     assert main(["ds"]) == 0
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == "funded 2 of 3 loans across 4 facilities; wrote ds/output\n"
+    out_dir = Path("ds", "output")
+    assert captured.err == f"funded 2 of 3 loans across 4 facilities; wrote {out_dir}\n"
 
 
 @pytest.mark.parametrize(
