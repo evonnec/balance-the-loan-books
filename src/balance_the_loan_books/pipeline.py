@@ -1,10 +1,11 @@
 """Wire the readers, the allocator and the writers together."""
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from balance_the_loan_books.allocator import Allocator
+from balance_the_loan_books.allocator import Allocator, TieBreak
+from balance_the_loan_books.covenants import DEFAULT_BUILDERS, CovenantBuilder
 from balance_the_loan_books.io import (
     InputError,
     iter_loans,
@@ -42,17 +43,24 @@ def validate_references(
             raise InputError(f"covenant references unknown bank {row.bank_id}")
 
 
-def run(input_dir: Path, output_dir: Path) -> RunSummary:
+def run(
+    input_dir: Path,
+    output_dir: Path,
+    *,
+    tie_break: TieBreak = TieBreak.LOWEST_ID,
+    builders: Sequence[CovenantBuilder] = DEFAULT_BUILDERS,
+) -> RunSummary:
     """Read ``input_dir/*.csv`` and write ``output_dir/assignments.csv`` and ``yields.csv``.
 
     Loans are read lazily and each assignment is written as soon as it is decided; yields are
-    written once the stream ends. Both files are replaced atomically.
+    written once the stream ends. Both files are replaced atomically. ``tie_break`` and ``builders``
+    are passed to :class:`~balance_the_loan_books.allocator.Allocator`.
     """
     banks = read_banks(input_dir / "banks.csv")
     facilities = read_facilities(input_dir / "facilities.csv")
     covenant_rows = read_covenants(input_dir / "covenants.csv")
     validate_references(facilities, covenant_rows, {b.id for b in banks})
-    allocator = Allocator(facilities, covenant_rows)
+    allocator = Allocator(facilities, covenant_rows, tie_break=tie_break, builders=builders)
 
     loans = 0
     funded = 0

@@ -64,5 +64,5 @@ program does.
 Run it yourself:
 
 ```
-uv run balance-the-loan-books data/small
+uv run balance-the-loan-books data/small --output-dir out/small
 ```

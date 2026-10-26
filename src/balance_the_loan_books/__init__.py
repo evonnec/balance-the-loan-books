@@ -7,10 +7,12 @@ try:
 except PackageNotFoundError:  # running from a source tree that is not installed
     __version__ = "0.0.0+unknown"
 
-from balance_the_loan_books.allocator import Allocator
+from balance_the_loan_books.allocator import Allocator, TieBreak
 from balance_the_loan_books.covenants import (
+    DEFAULT_BUILDERS,
     BannedState,
     Covenant,
+    CovenantBuilder,
     MaxDefaultLikelihood,
     build_covenants,
     covenants_for_facility,
@@ -21,16 +23,19 @@ from balance_the_loan_books.pipeline import RunSummary, run
 from balance_the_loan_books.yields import expected_yield, round_cents
 
 __all__ = [
+    "DEFAULT_BUILDERS",
     "Allocator",
     "Bank",
     "BannedState",
     "Covenant",
+    "CovenantBuilder",
     "CovenantRow",
     "Facility",
     "InputError",
     "Loan",
     "MaxDefaultLikelihood",
     "RunSummary",
+    "TieBreak",
     "__version__",
     "build_covenants",
     "covenants_for_facility",
