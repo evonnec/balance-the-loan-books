@@ -1,18 +1,59 @@
-loan 1 uses facility 1. it has the highest interest rate.
-126122 decreases by 10552 (amt of loan 1)
-now left with 115570 in facility 1
-expected yield = (1 - default_likelihood) * loan_interest_rate * amount - default_likelihood * amount - facility_interest_rate * amount
-(1 - 0.02) * .15 * 10552 - (0.02 * 10552) - (0.06 * 10552) = .98 * 1582.8 - 211.04 - 633.12 = 1551.144 - 211.04 - 633.12 = 706.984
+# Worked example: the `small` data set
 
-loan 2 uses facility 2. it can't use facility 1 b/c VT is banned for facility 1. 
-61104 decreases by 51157 (amt of loan 2)
-now left with 9947 left in facility 2
-(1 - .01) * .15 * 51157 - (0.01 * 51157) - (0.07 * 51157) = .99 * 7673.55 - 511.57 - 3580.99 = 7596.8145 - 511.57 - 3580.99 = 3504.2545
+Facilities (from `data/small/input/`):
 
-loan 3 uses facility 1. it uses facility 1 b/c it has the highest interest rate.
-115570 decreases by 74965 (amt of loan 3)
-now left with 40,605 in facility 1
-(1 - .06) * .35 * 74965 - (0.06 * 74965) - (0.06 * 74965) = .94 * 26237.75 - 4497.9 - 4497.9 = 24663.485 - 4497.9 - 4497.9 = 15667.685
+| Facility | Bank | Rate | Capacity |
+| --- | --- | --- | --- |
+| 1 | 2 | 0.06 | 126122 |
+| 2 | 1 | 0.07 | 61104 |
 
-facility id 1 total 16374.669 (round to the nearest int)
-facility id 2 total 3504.2545 (round to the nearest int)
+Covenants: facility 2 allows a default likelihood of at most 0.09 and bans `MT`; facility 1
+allows a default likelihood of at most 0.06 and bans `VT`.
+
+Expected yield per loan:
+
+```
+(1 - default_likelihood) * loan_rate * amount
+  - default_likelihood * amount
+  - facility_rate * amount
+```
+
+## Loan 1 (amount 10552, rate 0.15, default likelihood 0.02, MO)
+
+Both facilities allow it and both have room. Facility 1 is the cheaper (0.06 < 0.07), so it is
+chosen. Remaining capacity of facility 1: 126122 - 10552 = 115570.
+
+```
+(1 - 0.02) * 0.15 * 10552 - 0.02 * 10552 - 0.06 * 10552
+  = 1551.144 - 211.04 - 633.12 = 706.984
+```
+
+## Loan 2 (amount 51157, rate 0.15, default likelihood 0.01, VT)
+
+Facility 1 bans `VT`, so only facility 2 is allowed. Remaining capacity of facility 2:
+61104 - 51157 = 9947.
+
+```
+(1 - 0.01) * 0.15 * 51157 - 0.01 * 51157 - 0.07 * 51157
+  = 7596.8145 - 511.57 - 3580.99 = 3504.2545
+```
+
+## Loan 3 (amount 74965, rate 0.35, default likelihood 0.06, AL)
+
+Facility 2 no longer has room (9947 < 74965). Facility 1 allows it (0.06 is not above its
+maximum of 0.06) and has 115570 left, so it is chosen. Remaining capacity of facility 1:
+115570 - 74965 = 40605.
+
+```
+(1 - 0.06) * 0.35 * 74965 - 0.06 * 74965 - 0.06 * 74965
+  = 24663.485 - 4497.9 - 4497.9 = 15667.685
+```
+
+## Totals
+
+| Facility | Loans | Sum of expected yields | Rounded to the cent |
+| --- | --- | --- | --- |
+| 1 | 1, 3 | 706.984 + 15667.685 = 16374.669 | 16375 |
+| 2 | 2 | 3504.2545 | 3504 |
+
+These match `data/small/output/yields.csv`.
