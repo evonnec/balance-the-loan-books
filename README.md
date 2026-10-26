@@ -110,7 +110,7 @@ The problem statement leaves these open; each is covered by a test.
 | `yields.csv` lists every facility, sorted by id, including id `0` and unused facilities. | A complete, stable report. |
 | Unfunded loans appear in `assignments.csv` with an empty `facility_id`. | Every input loan has exactly one output row. |
 | Each output file is written atomically (hidden temp file, then rename). | A failure never leaves a truncated file. The two files are replaced one after the other, so a failure while writing `yields.csv` can leave a new `assignments.csv` next to an old `yields.csv`. |
-| Bad input that the readers detect raises `InputError` with `path, line N:` messages; the CLI maps it to exit code 1. | Actionable errors. Some malformed values and rows (for example short rows or non-numeric special values such as `NaN`) are not yet detected and can still end in a traceback. |
+| Bad input raises `InputError` with a `path, line N:` message; the CLI prints one `error:` line and exits 1. Detected: missing file or column, a row whose field count differs from the header's, bytes that are not UTF-8, a field over the csv size limit, unparseable numbers, and non-finite numbers (`NaN`, `sNaN`, `Infinity`). | Actionable errors, and no silent misparse: an unquoted `10,552` is a six-field row and is rejected rather than read as a different loan. Blank lines are skipped. Range and consistency checks are tracked separately. |
 | State matching is case-sensitive and exact (after trimming whitespace). | Postal codes are expected in upper case on both sides; covered by a test that documents it. |
 
 ## Design

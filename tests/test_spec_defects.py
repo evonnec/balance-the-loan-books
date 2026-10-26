@@ -77,7 +77,6 @@ def rows_of(input_dir: Path, name: str) -> list[bytes]:
 # --- #1: malformed rows ---------------------------------------------------------------------
 
 
-@defect(1, "a row with fewer fields than the header is an InputError, not an AttributeError")
 @pytest.mark.parametrize("name", FILES)
 def test_short_row_is_rejected_with_path_and_line(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str
@@ -87,7 +86,6 @@ def test_short_row_is_rejected_with_path_and_line(
     assert_rejected(input_dir, capsys, name)
 
 
-@defect(1, "short row surfaces as InputError from the reader (library level)")
 def test_short_loan_row_raises_input_error_with_line(tmp_path: Path) -> None:
     from balance_the_loan_books.io import InputError, iter_loans
 
@@ -97,7 +95,6 @@ def test_short_loan_row_raises_input_error_with_line(tmp_path: Path) -> None:
         list(iter_loans(path))
 
 
-@defect(1, "a row with more fields than the header is rejected, not silently misparsed")
 @pytest.mark.parametrize("name", FILES)
 def test_extra_field_is_rejected_with_path_and_line(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str
@@ -108,7 +105,6 @@ def test_extra_field_is_rejected_with_path_and_line(
     assert_rejected(input_dir, capsys, name)
 
 
-@defect(1, "an unquoted thousands separator (10,552) must not invent a phantom loan")
 def test_unquoted_thousands_separator_is_rejected(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -130,20 +126,12 @@ NUMERIC_COLUMNS = [
 ]
 
 
-# NaN and -NaN in an *amount* column already fail cleanly today (the "whole cents" check), so
-# those combinations are ordinary regression tests; every other combination is a defect.
-ALREADY_REJECTED = {("loans.csv", 1, "NaN"), ("loans.csv", 1, "-NaN")}
-ALREADY_REJECTED |= {("facilities.csv", 0, "NaN"), ("facilities.csv", 0, "-NaN")}
-
 NON_FINITE_CASES = [
     pytest.param(
         name,
         column,
         label,
         value,
-        marks=[]
-        if (name, column, value) in ALREADY_REJECTED
-        else [defect(1, "NaN / sNaN / Infinity in a numeric column is an InputError with a line")],
         id=f"{name}-{label.replace(' ', '_')}-{value}",
     )
     for name, column, label in NUMERIC_COLUMNS
@@ -167,7 +155,6 @@ def test_non_finite_number_is_rejected_with_path_and_line(
     assert_rejected(input_dir, capsys, name)
 
 
-@defect(1, "bytes that are not UTF-8 (e.g. cp1252) are an InputError, not UnicodeDecodeError")
 @pytest.mark.parametrize("name", FILES)
 def test_non_utf8_byte_is_rejected_with_path_and_a_line(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str
@@ -179,7 +166,6 @@ def test_non_utf8_byte_is_rejected_with_path_and_a_line(
     assert_rejected(input_dir, capsys, name, line=None)
 
 
-@defect(1, "a field over the csv module's size limit is an InputError, not _csv.Error")
 @pytest.mark.parametrize("name", FILES)
 def test_huge_field_is_rejected_with_path_and_line(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str
@@ -191,7 +177,6 @@ def test_huge_field_is_rejected_with_path_and_line(
     assert_rejected(input_dir, capsys, name)
 
 
-@defect(1, "a failed run (NaN loan rate) must leave both previous outputs byte-identical")
 def test_nan_loan_rate_leaves_previous_outputs_untouched(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
