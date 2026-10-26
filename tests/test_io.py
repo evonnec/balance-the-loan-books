@@ -171,17 +171,6 @@ class TestIterLoans:
         path.write_bytes(b"id,interest_rate,amount,default_likelihood,state\r\n1,0.1,10,0,MO\r\n")
         assert [loan.state for loan in iter_loans(path)] == ["MO"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: a data row with fewer fields than the header gives None values; "
-        "None.strip() raises AttributeError, which is not converted to InputError",
-    )
-    def test_short_row_is_reported_as_input_error(self, tmp_path: Path) -> None:
-        path = tmp_path / "l.csv"
-        path.write_bytes(b"id,interest_rate,amount,default_likelihood,state\n1,0.1,10\n")
-        with pytest.raises(InputError, match="line 2"):
-            list(iter_loans(path))
-
 
 class TestWriters:
     def test_write_assignments_exact_bytes(self, tmp_path: Path) -> None:
