@@ -7,8 +7,9 @@ Facilities (from `data/small/input/`):
 | 1 | 2 | 0.06 | 126122 |
 | 2 | 1 | 0.07 | 61104 |
 
-Covenants: facility 2 allows a default likelihood of at most 0.09 and bans `MT`; facility 1
-allows a default likelihood of at most 0.06 and bans `VT`.
+Covenants (`covenants.csv` has three rows): facility 2 allows a default likelihood of at most 0.09
+and bans `MT`; facility 1 allows a default likelihood of at most 0.06 and bans `VT` (one row, two
+covenants) and, in a separate row, bans `CA`. None of the three loans originates in `CA`.
 
 Expected yield per loan:
 
@@ -56,4 +57,12 @@ maximum of 0.06) and has 115570 left, so it is chosen. Remaining capacity of fac
 | 1 | 1, 3 | 706.984 + 15667.685 = 16374.669 | 16375 |
 | 2 | 2 | 3504.2545 | 3504 |
 
-These match `data/small/output/yields.csv`.
+These match `data/small/output/yields.csv`. Rounding happens once per facility, on the sum:
+rounding each loan first (707 + 15668 = 16375) would happen to agree here, but is not what the
+program does.
+
+Run it yourself:
+
+```
+uv run balance-the-loan-books data/small
+```
