@@ -3,8 +3,8 @@
 A small, dependency-free Python 3.15 command-line tool for a lender that funds customer loans
 from several bank debt facilities. It streams a list of loans, assigns each one to the cheapest
 facility whose covenants and remaining capacity allow it, and reports the expected yield per
-facility. Money math is exact (`Decimal`), output is deterministic, and the covenant rules are
-pluggable.
+facility. Money math uses `Decimal` (no binary-float error), output is deterministic, and the
+covenant rules and the equal-rate tie-break are pluggable.
 
 ## Problem
 
@@ -38,23 +38,28 @@ Requires Python 3.15 and [uv](https://docs.astral.sh/uv/getting-started/installa
 
 ```
 uv sync
-uv run balance-the-loan-books data/small       # reads data/small/input, writes data/small/output
-uv run balance-the-loan-books data/large
+uv run balance-the-loan-books data/small --output-dir out/small    # reads data/small/input
+uv run balance-the-loan-books data/large --output-dir out/large
 ```
+
+Always pass `--output-dir` when trying the bundled data: without it the tool writes into
+`data/<name>/output`, which holds the committed reference results that the golden tests compare
+against.
 
 Install it as a standalone tool, or run the module directly:
 
 ```
 uv tool install .                               # or: pipx install .
-balance-the-loan-books data/small
+balance-the-loan-books data/small --output-dir out/small
 
-uv run python -m balance_the_loan_books data/small
+uv run python -m balance_the_loan_books data/small --output-dir out/small
 ```
 
 ## CLI reference
 
 ```
-balance-the-loan-books [dataset_dir] [--input-dir DIR] [--output-dir DIR] [--version]
+balance-the-loan-books [dataset_dir] [--input-dir DIR] [--output-dir DIR]
+                        [--tie-break {lowest-id,file-order,highest-id}] [--version]
 ```
 
 | Argument | Meaning |
@@ -62,6 +67,7 @@ balance-the-loan-books [dataset_dir] [--input-dir DIR] [--output-dir DIR] [--ver
 | `dataset_dir` | Directory holding `input/` and `output/`. |
 | `--input-dir` | Read the CSVs from here instead of `<dataset_dir>/input`. |
 | `--output-dir` | Write results here instead of `<dataset_dir>/output` (created if missing). |
+| `--tie-break` | Order of facilities with equal interest rates: `lowest-id` (default), `file-order` (row order of `facilities.csv`) or `highest-id`. See [Tie-break](#tie-break-among-equal-rates). |
 | `--version` | Print the version and exit. |
 
 Give either `dataset_dir` or both `--input-dir` and `--output-dir`. A one-line summary
@@ -95,16 +101,16 @@ The problem statement leaves these open; each is covered by a test.
 
 | Decision | Reason |
 | --- | --- |
-| Facilities are tried cheapest first; equal rates go to the lowest facility id. | Deterministic output, independent of file order. |
+| Facilities are tried cheapest first; equal rates go to the lowest facility id (`--tie-break lowest-id`, the default). | Output does not change when the rows of `facilities.csv` are re-sorted. This choice decides whether loan 425 of `data/large` is funded; see [Tie-break](#tie-break-among-equal-rates). |
 | A loan fits when `amount <= remaining capacity`. | A facility may be filled exactly. |
 | The maximum default likelihood is inclusive (`<=`). | "At most" reads as inclusive, and the worked example needs it (loan 3 sits exactly on facility 1's 0.06). |
 | A covenant row with a blank `facility_id` binds the whole bank. | That is what the blank means. |
 | A row with both a likelihood and a state is two covenants. | Both restrictions must hold. |
-| All money math is `Decimal`; rounding is `ROUND_HALF_UP` to whole cents, once per facility on the exact sum. | No binary-float error; rounding per loan would accumulate error. Halves round away from zero, so `-0.5` becomes `-1`. |
+| All money math is `Decimal` (exact within the default 28-significant-digit context, ample for cent amounts); rounding is `ROUND_HALF_UP` to whole cents, once per facility on the exact sum. | No binary-float error; rounding per loan would accumulate error. Halves round away from zero, so `-0.5` becomes `-1`. |
 | `yields.csv` lists every facility, sorted by id, including id `0` and unused facilities. | A complete, stable report. |
 | Unfunded loans appear in `assignments.csv` with an empty `facility_id`. | Every input loan has exactly one output row. |
-| Outputs are written atomically (temp file, then rename). | A failure mid-run never leaves a truncated file or clobbers the previous result. |
-| Bad input raises `InputError` with `path, line N:` messages; the CLI maps it to exit code 1. | Actionable errors, no tracebacks for data problems. |
+| Each output file is written atomically (hidden temp file, then rename). | A failure never leaves a truncated file. The two files are replaced one after the other, so a failure while writing `yields.csv` can leave a new `assignments.csv` next to an old `yields.csv`. |
+| Bad input that the readers detect raises `InputError` with `path, line N:` messages; the CLI maps it to exit code 1. | Actionable errors. Some malformed values and rows (for example short rows or non-numeric special values such as `NaN`) are not yet detected and can still end in a traceback. |
 | State matching is case-sensitive and exact (after trimming whitespace). | Postal codes are expected in upper case on both sides; covered by a test that documents it. |
 
 ## Design
@@ -113,8 +119,8 @@ The problem statement leaves these open; each is covered by a test.
 src/balance_the_loan_books/
   models.py     frozen dataclasses: Loan, Facility, Bank, CovenantRow; type aliases
   yields.py     expected_yield, round_cents (Decimal arithmetic)
-  covenants.py  Covenant ABC, MaxDefaultLikelihood, BannedState, COVENANT_BUILDERS registry
-  allocator.py  Allocator: ordered facility states, assign(loan) -> facility id | None
+  covenants.py  Covenant ABC, MaxDefaultLikelihood, BannedState, DEFAULT_BUILDERS
+  allocator.py  Allocator, TieBreak: ordered facility states, assign(loan) -> facility id | None
   io.py         CSV readers (by header), lazy iter_loans, atomic writers, InputError
   pipeline.py   validate_references, run(input_dir, output_dir) -> RunSummary
   cli.py        argparse front end, exit codes
@@ -122,18 +128,21 @@ src/balance_the_loan_books/
 
 Data flow: `run` reads banks, facilities and covenant rows eagerly, validates references,
 builds one `Allocator`, then pulls loans from the lazy `iter_loans` reader. Each decision is
-written to `assignments.csv` immediately; `yields.csv` is written when the stream ends.
+passed to the writer as it is made and streamed into a hidden temp file; `assignments.csv` appears
+when the stream ends, and `yields.csv` is written after it.
 
 ### Adding a covenant type
 
 Subclass `Covenant`, write a builder that returns an instance or `None` for rows that do not use
-it, and append the builder to `COVENANT_BUILDERS`. The allocator needs no change.
+it, and pass the builders to the allocator. There is no global registry: `DEFAULT_BUILDERS` is an
+immutable tuple, and each `Allocator` (or `run`) takes its own `builders`, so allocators with
+different covenant sets can coexist in one process.
 
 ```python
 from dataclasses import dataclass
 from typing import override
 
-from balance_the_loan_books import covenants
+from balance_the_loan_books import Allocator, DEFAULT_BUILDERS
 from balance_the_loan_books.covenants import Covenant
 from balance_the_loan_books.models import CovenantRow, Loan
 
@@ -152,11 +161,13 @@ def build_min_amount(row: CovenantRow) -> Covenant | None:
     return None
 
 
-covenants.COVENANT_BUILDERS.append(build_min_amount)
+allocator = Allocator(facilities, covenant_rows, builders=(*DEFAULT_BUILDERS, build_min_amount))
+# or: run(input_dir, output_dir, builders=(*DEFAULT_BUILDERS, build_min_amount))
 ```
 
 A new CSV column also needs a field on `CovenantRow` and a parse step in `io.read_covenants`.
-`tests/test_covenants.py` shows a complete custom covenant being honoured by the allocator.
+`tests/test_covenants.py` shows a custom covenant being honoured by one allocator while another
+in the same process uses the defaults.
 
 ### Streaming and atomic writes
 
@@ -171,19 +182,46 @@ With F facilities, C covenant rows, k covenants per facility and N loans:
 
 - setup: O(F log F + C·F) (sort facilities, match every row against every facility);
 - per loan: O(F·k) worst case, with early exit at the first facility that accepts;
-- memory: O(F + C), independent of N.
+- memory: O(F·k + C), independent of N. A bank-wide covenant row is instantiated once per
+  facility of that bank, so in the worst case k grows with C and memory is O(F·C).
 
 ## Results on the bundled data sets
 
 | Data set | Loans | Funded | Outcome |
 | --- | --- | --- | --- |
 | `data/small` | 3 | 3 | Output equals the committed reference exactly (`1,1 / 2,2 / 3,1`; yields 16375 and 3504). |
-| `data/large` | 425 | 424 | Output equals the committed files in `data/large/output`. Loan 425 is unfunded. |
+| `data/large` | 425 | 424 | Default (`lowest-id`) output equals the committed files in `data/large/output`. Loan 425 is unfunded. |
 
-Loan 425 (amount 86614, state `AZ`) is the last loan in the file. By then no facility has that
-much capacity left (the roomiest, facility 13, has 77357), so it cannot be funded under any
-covenant reading. Which facilities have run low depends on how earlier ties between equal-rate
-facilities were ordered, which is why the lowest-id tie-break is spelled out above.
+### Tie-break among equal rates
+
+Several facilities share an interest rate, so the order among them matters. On `data/large` it
+decides the headline result. Measured by running each policy:
+
+| `--tie-break` | Funded | Unfunded | Assignments that differ from `lowest-id` |
+| --- | --- | --- | --- |
+| `lowest-id` (default) | 424 of 425 | loan 425 | - |
+| `file-order` | 425 of 425 | none | 158 of 425 |
+| `highest-id` | 425 of 425 | none | 313 of 425 |
+
+Loan 425 (amount 86614, state `AZ`) is the last loan in the file. Under `lowest-id` the roomiest
+facility when it arrives is facility 13 with 77357 left, which is too little. Under `file-order`
+or `highest-id` earlier loans land on other equal-rate facilities, facility 13 still has 87402,
+and it takes loan 425. So the loan is not unfundable in itself: whether it is funded depends on
+the tie-break.
+
+`lowest-id` is the default because its results do not depend on the row order of
+`facilities.csv` (reversing the rows gives byte-identical output), and it keeps the committed
+reference outputs valid. The trade-off is that funding loan 425 is a property of this data set's
+tie order, not of any general rule: ordering ties by capacity (not offered as a policy) leaves 425
+unfunded again. The problem statement accepts that tie ordering may leave the last large loan
+unassigned.
+
+Covenant readings are also constrained by the guarantee that loans can be placed: reading the
+maximum default likelihood as exclusive leaves 36 loans unfunded on `data/large` under every
+tie-break, while the inclusive reading chosen here leaves at most loan 425.
+
+In code: `Allocator(facilities, rows, tie_break=TieBreak.FILE_ORDER)` or
+`run(input_dir, output_dir, tie_break=TieBreak.FILE_ORDER)`.
 
 ## Development
 
@@ -204,7 +242,9 @@ subset, since the coverage threshold applies to the whole suite.
 ## Python 3.15 notes
 
 - **Lazy imports (PEP 810):** `lazy import csv` in `io.py` and `lazy import argparse` in `cli.py`
-  keep start-up cheap when those modules are not needed immediately.
+  defer loading those modules until first use. The CLI builds its parser and reads CSV on every
+  run, so both modules are loaded anyway; the only saving is for code that imports the library
+  without running the CLI or reading files.
 - **Unparenthesised `except` (PEP 758):** `except InputError, OSError:` in `cli.py`. Without
   parentheses the clause cannot bind `as`, so the error is read from `sys.exception()`.
 - **`type` aliases (PEP 695):** `Cents`, `FacilityId`, `LoanId`, `BankId` in `models.py` and
@@ -227,8 +267,10 @@ Design notes, not commitments.
   start-up, expose `POST /loans` returning the chosen facility and `GET /yields`, and persist
   remaining capacity transactionally so a restart or a second replica cannot over-allocate.
   Assignment must stay serialised per facility pool (single writer or row-level locking).
-- **Batch optimisation.** Greedy cheapest-first is optimal for the stream the problem defines but
-  not for a known batch: with all loans in hand, assignment is a capacitated matching problem
+- **Batch optimisation.** Greedy cheapest-first is the policy the problem specifies for the stream.
+  It maximises each loan's own yield, but not total yield or the number of funded loans, even
+  online: a low-yield loan can use up a cheap facility that a later loan needed. With all loans in
+  hand, assignment is a capacitated matching problem
   (min-cost flow or an ILP) that can fund more loans or earn more yield. It would be an
   alternative `run` mode, with the streaming path kept as the default.
 

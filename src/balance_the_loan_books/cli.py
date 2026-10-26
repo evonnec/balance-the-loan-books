@@ -6,6 +6,7 @@ from pathlib import Path
 lazy import argparse
 
 from balance_the_loan_books import __version__
+from balance_the_loan_books.allocator import TieBreak
 from balance_the_loan_books.io import InputError
 from balance_the_loan_books.pipeline import run
 
@@ -26,6 +27,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--input-dir", type=Path, help="override <dataset_dir>/input")
     parser.add_argument("--output-dir", type=Path, help="override <dataset_dir>/output")
+    parser.add_argument(
+        "--tie-break",
+        choices=[t.value for t in TieBreak],
+        default=TieBreak.LOWEST_ID.value,
+        help="order of facilities with equal interest rates (default: %(default)s)",
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
 
@@ -43,7 +50,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if input_dir is None or output_dir is None:
         parser.error("give a dataset_dir, or both --input-dir and --output-dir")
     try:
-        summary = run(input_dir, output_dir)
+        summary = run(input_dir, output_dir, tie_break=TieBreak(args.tie_break))
     except InputError, OSError:  # PEP 758: no parentheses, but also no ``as`` binding
         print(f"error: {sys.exception()}", file=sys.stderr)
         return EXIT_BAD_INPUT

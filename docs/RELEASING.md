@@ -68,8 +68,7 @@ existing tag.
 
 ## Publishing to PyPI (one-time setup)
 
-The name `balance-the-loan-books` is currently unclaimed on PyPI. Check again before the first
-upload. Publishing uses Trusted Publishing (OIDC), so no API token is stored.
+Check that the name `balance-the-loan-books` is still available on PyPI before the first upload. Publishing uses Trusted Publishing (OIDC), so no API token is stored.
 
 1. Create a PyPI account at https://pypi.org and enable 2FA.
 2. Add a pending trusted publisher at https://pypi.org/manage/account/publishing/ with: PyPI

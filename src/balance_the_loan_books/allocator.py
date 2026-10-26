@@ -1,12 +1,36 @@
 """The streaming assignment engine."""
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
+from enum import StrEnum
 
-from balance_the_loan_books.covenants import Covenant, covenants_for_facility
+from balance_the_loan_books.covenants import (
+    DEFAULT_BUILDERS,
+    Covenant,
+    CovenantBuilder,
+    covenants_for_facility,
+)
 from balance_the_loan_books.models import Cents, CovenantRow, Facility, FacilityId, Loan
 from balance_the_loan_books.yields import expected_yield, round_cents
+
+
+class TieBreak(StrEnum):
+    """How facilities with equal interest rates are ordered; the CLI spells these as the values."""
+
+    LOWEST_ID = "lowest-id"
+    """Lowest facility id first. Independent of the row order of ``facilities.csv`` (default)."""
+    FILE_ORDER = "file-order"
+    """Order of the rows in ``facilities.csv``."""
+    HIGHEST_ID = "highest-id"
+    """Highest facility id first."""
+
+
+_SORT_KEYS: dict[TieBreak, Callable[[Facility], tuple[Decimal, int]]] = {
+    TieBreak.LOWEST_ID: lambda f: (f.interest_rate, f.id),
+    TieBreak.HIGHEST_ID: lambda f: (f.interest_rate, -f.id),
+    TieBreak.FILE_ORDER: lambda f: (f.interest_rate, 0),
+}
 
 
 @dataclass(slots=True)
@@ -23,15 +47,25 @@ class _FacilityState:
 class Allocator:
     """Assigns loans one at a time to the cheapest facility that can take them.
 
-    Facilities are tried in ascending ``(interest_rate, id)`` order, so equal rates are broken
-    deterministically by lowest facility id. A loan only fits when ``loan.amount`` is at most the
-    facility's remaining capacity.
+    Facilities are tried in ascending interest rate order; equal rates are ordered by
+    ``tie_break`` (default :attr:`TieBreak.LOWEST_ID`, which does not depend on the order of
+    ``facilities``). Covenant rows are turned into covenants by ``builders``. A loan only fits when
+    ``loan.amount`` is at most the facility's remaining capacity.
     """
 
-    def __init__(self, facilities: Iterable[Facility], covenant_rows: Sequence[CovenantRow]):
-        ordered = sorted(facilities, key=lambda f: (f.interest_rate, f.id))
+    def __init__(
+        self,
+        facilities: Iterable[Facility],
+        covenant_rows: Sequence[CovenantRow],
+        *,
+        tie_break: TieBreak = TieBreak.LOWEST_ID,
+        builders: Sequence[CovenantBuilder] = DEFAULT_BUILDERS,
+    ):
+        # sorted() is stable, so FILE_ORDER only needs the interest rate as its key.
+        ordered = sorted(facilities, key=_SORT_KEYS[TieBreak(tie_break)])
         self._states = [
-            _FacilityState(f, covenants_for_facility(f, covenant_rows), f.amount) for f in ordered
+            _FacilityState(f, covenants_for_facility(f, covenant_rows, builders), f.amount)
+            for f in ordered
         ]
 
     def assign(self, loan: Loan) -> FacilityId | None:

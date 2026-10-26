@@ -2,7 +2,9 @@
 
 To add a new kind of covenant, subclass :class:`Covenant`, write a builder function that turns a
 :class:`~balance_the_loan_books.models.CovenantRow` into an instance (or ``None`` when the row
-does not use that kind), and append the builder to :data:`COVENANT_BUILDERS`.
+does not use that kind), and pass it with the defaults as ``builders=(*DEFAULT_BUILDERS, builder)``
+to :class:`~balance_the_loan_books.allocator.Allocator` or
+:func:`~balance_the_loan_books.pipeline.run`. There is no global registry to mutate.
 """
 
 from abc import ABC, abstractmethod
@@ -62,17 +64,26 @@ def _banned_state(row: CovenantRow) -> Covenant | None:
     return BannedState(row.banned_state)
 
 
-COVENANT_BUILDERS: list[CovenantBuilder] = [_max_default_likelihood, _banned_state]
-"""Registry of builders consulted for every covenant row."""
+DEFAULT_BUILDERS: tuple[CovenantBuilder, ...] = (_max_default_likelihood, _banned_state)
+"""The built-in builders, consulted for every covenant row unless others are injected."""
+
+COVENANT_BUILDERS = DEFAULT_BUILDERS
+"""Backward-compatible alias of :data:`DEFAULT_BUILDERS` (an immutable tuple)."""
 
 
-def build_covenants(row: CovenantRow) -> tuple[Covenant, ...]:
+def build_covenants(
+    row: CovenantRow, builders: Iterable[CovenantBuilder] = DEFAULT_BUILDERS
+) -> tuple[Covenant, ...]:
     """Turn one covenant row into its covenants (a row may hold more than one)."""
-    built = (builder(row) for builder in COVENANT_BUILDERS)
+    built = (builder(row) for builder in builders)
     return tuple(covenant for covenant in built if covenant is not None)
 
 
-def covenants_for_facility(facility: Facility, rows: Iterable[CovenantRow]) -> tuple[Covenant, ...]:
+def covenants_for_facility(
+    facility: Facility,
+    rows: Iterable[CovenantRow],
+    builders: Iterable[CovenantBuilder] = DEFAULT_BUILDERS,
+) -> tuple[Covenant, ...]:
     """Collect every covenant that applies to ``facility``.
 
     A row applies when its ``facility_id`` equals the facility's id, or, when the row has no
@@ -85,5 +96,5 @@ def covenants_for_facility(facility: Facility, rows: Iterable[CovenantRow]) -> t
         else:
             applies = row.facility_id == facility.id
         if applies:
-            applicable.extend(build_covenants(row))
+            applicable.extend(build_covenants(row, builders))
     return tuple(applicable)

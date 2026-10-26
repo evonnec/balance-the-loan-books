@@ -1,4 +1,3 @@
-from collections.abc import Iterator
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import override
@@ -8,6 +7,7 @@ import pytest
 from balance_the_loan_books import covenants
 from balance_the_loan_books.allocator import Allocator
 from balance_the_loan_books.covenants import (
+    DEFAULT_BUILDERS,
     BannedState,
     Covenant,
     MaxDefaultLikelihood,
@@ -119,29 +119,55 @@ class MinAmount(Covenant):
         return loan.amount >= self.minimum
 
 
+def _min_amount_builder(row: CovenantRow) -> Covenant | None:
+    # Piggy-back on banned_state text like "MIN:500" to avoid changing CovenantRow.
+    if row.banned_state is not None and row.banned_state.startswith("MIN:"):
+        return MinAmount(int(row.banned_state.removeprefix("MIN:")))
+    return None
+
+
+WITH_MIN_AMOUNT = (*DEFAULT_BUILDERS, _min_amount_builder)
+
+
 class TestExtensibility:
-    @pytest.fixture
-    def with_min_amount(self, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-        def build(row: CovenantRow) -> Covenant | None:
-            # Piggy-back on banned_state text like "MIN:500" to avoid changing CovenantRow.
-            if row.banned_state is not None and row.banned_state.startswith("MIN:"):
-                return MinAmount(int(row.banned_state.removeprefix("MIN:")))
-            return None
+    def test_default_builders_are_an_immutable_tuple(self) -> None:
+        assert isinstance(DEFAULT_BUILDERS, tuple)
+        assert covenants.COVENANT_BUILDERS is DEFAULT_BUILDERS
 
-        monkeypatch.setattr(covenants, "COVENANT_BUILDERS", [*covenants.COVENANT_BUILDERS, build])
-        yield
-
-    def test_custom_builder_is_used_by_build_covenants(self, with_min_amount: None) -> None:
+    def test_injected_builder_is_used_by_build_covenants(self) -> None:
         row = make_row(banned_state="MIN:500")
-        assert MinAmount(500) in build_covenants(row)
+        assert MinAmount(500) in build_covenants(row, WITH_MIN_AMOUNT)
 
-    def test_allocator_honours_custom_covenant(self, with_min_amount: None) -> None:
+    def test_defaults_ignore_the_custom_covenant(self) -> None:
+        row = make_row(banned_state="MIN:500")
+        assert MinAmount(500) not in build_covenants(row)
+        assert build_covenants(row) == (BannedState("MIN:500"),)
+
+    def test_covenants_for_facility_accepts_builders(self) -> None:
+        rows = [make_row(bank_id=1, facility_id=1, banned_state="MIN:500")]
+        found = covenants_for_facility(make_facility(id=1), rows, WITH_MIN_AMOUNT)
+        assert MinAmount(500) in found
+
+    def test_allocator_honours_injected_covenant(self) -> None:
         facilities = [
             make_facility(id=1, interest_rate="0.01"),
             make_facility(id=2, interest_rate="0.02"),
         ]
         rows = [make_row(bank_id=1, facility_id=1, banned_state="MIN:500")]
-        allocator = Allocator(facilities, rows)
+        allocator = Allocator(facilities, rows, builders=WITH_MIN_AMOUNT)
 
         assert allocator.assign(make_loan(id=1, amount=499)) == 2  # too small for facility 1
         assert allocator.assign(make_loan(id=2, amount=500)) == 1
+
+    def test_allocators_with_different_builders_coexist(self) -> None:
+        facilities = [
+            make_facility(id=1, interest_rate="0.01"),
+            make_facility(id=2, interest_rate="0.02"),
+        ]
+        rows = [make_row(bank_id=1, facility_id=1, banned_state="MIN:500")]
+        custom = Allocator(facilities, rows, builders=WITH_MIN_AMOUNT)
+        default = Allocator(facilities, rows)
+
+        small = make_loan(amount=499)
+        assert custom.assign(small) == 2
+        assert default.assign(small) == 1  # "MIN:500" is just a banned state here
