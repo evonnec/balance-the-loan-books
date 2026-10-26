@@ -1,0 +1,72 @@
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"
+
+[project]
+name = "balance-the-loan-books"
+version = "0.1.0"
+description = "Stream loans and assign each to the cheapest debt facility whose covenants and capacity allow it"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "EvonneC" }]
+requires-python = ">=3.15"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.15",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/evonnec/balance-the-loan-books"
+Repository = "https://github.com/evonnec/balance-the-loan-books"
+Issues = "https://github.com/evonnec/balance-the-loan-books/issues"
+
+[project.scripts]
+balance-the-loan-books = "balance_the_loan_books.cli:main"
+
+[dependency-groups]
+dev = [
+    "hypothesis",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.uv.build-backend]
+module-name = "balance_the_loan_books"
+
+[tool.ruff]
+target-version = "py315"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "PTH", "RET", "C4"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["balance_the_loan_books"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.15"
+strict = true
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = ["--import-mode=importlib", "-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+
+[tool.coverage.report]
+exclude_also = ["if __name__ == .__main__.:"]
