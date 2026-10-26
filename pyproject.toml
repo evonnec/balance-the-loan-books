@@ -60,13 +60,20 @@ line-ending = "lf"
 [tool.mypy]
 python_version = "3.15"
 strict = true
-mypy_path = "src"
+mypy_path = "src:tests"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
-addopts = ["--import-mode=importlib", "-ra", "--strict-markers", "--strict-config"]
+pythonpath = ["src", "tests"]
+addopts = ["--import-mode=importlib", "-ra", "--strict-markers", "--strict-config", "--cov", "--cov-branch"]
 xfail_strict = true
 
+[tool.coverage.run]
+branch = true
+source = ["balance_the_loan_books"]
+
 [tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = true
 exclude_also = ["if __name__ == .__main__.:"]
