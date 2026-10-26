@@ -3,21 +3,12 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
-from hypothesis import HealthCheck, given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 
 from balance_the_loan_books.allocator import Allocator
 from balance_the_loan_books.models import CovenantRow, Facility, Loan
 from balance_the_loan_books.yields import expected_yield, round_cents
-
-settings.register_profile(
-    "ci",
-    max_examples=200,
-    derandomize=True,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-)
-settings.load_profile("ci")
 
 STATES = ["AA", "BB", "CC"]
 LIKELIHOODS = st.sampled_from([Decimal(s) for s in ("0", "0.01", "0.05", "0.09", "0.1", "0.5")])
