@@ -20,7 +20,8 @@ every covenant (lending restriction) the banks place on their facilities.
 
 ## Input
 
-Four CSV files per data set (`small/input/` and `large/input/`):
+Four CSV files per data set (`data/small/input/` and `data/large/input/`). Columns are read by
+header name, so their order in the files does not matter:
 
 | File | Columns |
 | --- | --- |
@@ -44,3 +45,27 @@ expected_yield = (1 - default_likelihood) * loan_interest_rate * amount
   rounded to the nearest cent.
 
 The `small` data set includes reference outputs for checking the implementation.
+
+## Running it
+
+Requires Python 3.15 and [uv](https://docs.astral.sh/uv/).
+
+```
+uv sync
+uv run balance-the-loan-books data/small     # reads data/small/input, writes data/small/output
+uv run balance-the-loan-books data/large
+uv run balance-the-loan-books --input-dir IN --output-dir OUT
+```
+
+Data sets live under `data/<name>/{input,output}/`. A hand-worked example is in
+`docs/worked-example.md`.
+
+Behaviour decisions: ties on interest rate go to the lowest facility id; a maximum default
+likelihood is inclusive; yields are computed with `Decimal` and rounded half up to whole cents;
+`yields.csv` lists every facility, including those that funded nothing (yield 0).
+
+## Development
+
+```
+uv run pytest && uv run ruff check . && uv run ruff format --check . && uv run mypy src tests
+```
