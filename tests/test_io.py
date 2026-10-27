@@ -229,3 +229,9 @@ class TestWriters:
         with pytest.raises(RuntimeError):
             write_yields(path, boom())
         assert list(path.parent.iterdir()) == []
+
+
+def test_blank_lines_between_rows_are_skipped(tmp_path: Path) -> None:
+    path = tmp_path / "banks.csv"
+    path.write_bytes(b"id,name\n1,A\n\n2,B\n\n")
+    assert read_banks(path) == [Bank(id=1, name="A"), Bank(id=2, name="B")]

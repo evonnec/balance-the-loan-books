@@ -26,9 +26,12 @@ class InputError(ValueError):
 
 def _parse_decimal(text: str) -> Decimal:
     try:
-        return Decimal(text.strip())
+        value = Decimal(text.strip())
     except InvalidOperation:
         raise ValueError(f"not a number: {text!r}") from None
+    if not value.is_finite():
+        raise ValueError(f"not a finite number: {text!r}")
+    return value
 
 
 def _parse_cents(text: str) -> Cents:
@@ -51,19 +54,48 @@ def _optional[T](text: str | None, parse: Callable[[str], T]) -> T | None:
     return parse(text)
 
 
+def _undecodable_line(path: Path) -> int:
+    """The 1-based physical line of the first byte sequence that is not valid UTF-8."""
+    with path.open("rb") as handle:
+        for number, raw in enumerate(handle, start=1):
+            try:
+                raw.decode("utf-8")
+            except UnicodeDecodeError:
+                return number
+    return 1  # pragma: no cover - the caller only asks after a decode failure
+
+
 def _rows(path: Path, required: tuple[str, ...]) -> Iterator[tuple[int, dict[str, str]]]:
-    """Yield ``(line_number, row)`` for each data row, checking the header first."""
+    """Yield ``(line_number, row)`` for each data row, checking the header first.
+
+    Rows whose field count differs from the header's, undecodable bytes and oversized fields
+    are reported as `InputError` with the offending line.
+    """
     try:
         handle = path.open(newline="", encoding="utf-8")
     except FileNotFoundError:
         raise InputError(f"missing input file: {path}") from None
     with handle:
-        reader = csv.DictReader(handle)
-        missing = [name for name in required if name not in (reader.fieldnames or [])]
-        if missing:
-            raise InputError(f"{path}: missing column(s): {', '.join(missing)}")
-        for row in reader:
-            yield reader.line_num, row
+        reader = csv.reader(handle)
+        try:
+            header = next(reader, [])
+            missing = [name for name in required if name not in header]
+            if missing:
+                raise InputError(f"{path}: missing column(s): {', '.join(missing)}")
+            width = len(header)
+            for fields in reader:
+                if not fields:
+                    continue  # blank line
+                if len(fields) != width:
+                    raise InputError(
+                        f"{path}, line {reader.line_num}: expected {width} fields, "
+                        f"found {len(fields)}"
+                    )
+                yield reader.line_num, dict(zip(header, fields, strict=True))
+        except UnicodeDecodeError:
+            raise InputError(f"{path}, line {_undecodable_line(path)}: not valid UTF-8") from None
+        except csv.Error as error:
+            raise InputError(f"{path}, line {reader.line_num}: {error}") from None
 
 
 def _records[R](
@@ -72,7 +104,7 @@ def _records[R](
     for line, row in _rows(path, required):
         try:
             yield build(row)
-        except (ValueError, TypeError, KeyError) as error:
+        except (ValueError, TypeError, KeyError, ArithmeticError) as error:
             raise InputError(f"{path}, line {line}: {error}") from error
 
 
