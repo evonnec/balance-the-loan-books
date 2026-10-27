@@ -156,14 +156,26 @@ def test_non_finite_number_is_rejected_with_path_and_line(
 
 
 @pytest.mark.parametrize("name", FILES)
-def test_non_utf8_byte_is_rejected_with_path_and_a_line(
+def test_non_utf8_byte_is_rejected_with_path_and_line(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], name: str
 ) -> None:
     input_dir = small_input(tmp_path)
     fields = rows_of(input_dir, name)[1].split(b",")
     fields[-1] = b"Caf\xe9"
     replace_line(input_dir / name, 2, b",".join(fields))
-    assert_rejected(input_dir, capsys, name, line=None)
+    assert_rejected(input_dir, capsys, name, line=2)
+
+
+def test_non_utf8_byte_deep_in_a_large_file_reports_its_physical_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The decoder works in chunks, so the reader's own line count lags far behind the bad byte.
+    input_dir = small_input(tmp_path)
+    rows = [b"interest_rate,amount,id,default_likelihood,state"]
+    rows += [b"0.15,100,%d,0.01,MO" % i for i in range(1, 6000)]
+    rows[5000] = b"0.15,100,5000,0.01,M\xe9"
+    (input_dir / "loans.csv").write_bytes(b"\n".join(rows) + b"\n")
+    assert_rejected(input_dir, capsys, "loans.csv", line=5001)
 
 
 @pytest.mark.parametrize("name", FILES)
